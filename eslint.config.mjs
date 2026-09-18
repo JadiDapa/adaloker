@@ -12,6 +12,13 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Prisma client is generated code, not ours to lint.
+    "generated/**",
+    // Vendored skill docs/templates (from `npx skills add`), not app code.
+    ".agents/**",
+    // Standalone Node script (not React) — the react-hooks rule misfires on
+    // Baileys' `useMultiFileAuthState` because of its "use..." name.
+    "whatsapp-bot/**",
   ]),
 ]);
 

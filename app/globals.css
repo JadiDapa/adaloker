@@ -1,26 +1,277 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "@clerk/ui/themes/shadcn.css";
+@import "uploadthing/tw/v4";
+@plugin "@tailwindcss/typography";
+@source "../node_modules/@uploadthing/react/dist";
+
+@custom-variant dark (&:is(.dark *));
+
+/* Shorthand variants the "maia" shadcn components are written against —
+   normally injected by `shadcn init`, but that step never completed here
+   (it crashed on a dependency conflict before reaching this file). They map
+   onto the real attributes Radix primitives emit (`data-state`,
+   `data-orientation`), and Tailwind auto-derives "group-" and "peer-" forms
+   from these (e.g. group-data-horizontal/tabs:) so nothing else needs to change. */
+@custom-variant data-active (&[data-state="active"]);
+@custom-variant data-open (&[data-state="open"]);
+@custom-variant data-closed (&[data-state="closed"]);
+@custom-variant data-horizontal (&[data-orientation="horizontal"]);
+@custom-variant data-vertical (&[data-orientation="vertical"]);
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: oklch(0.9595 0.0080 253.8534);
+  --foreground: oklch(0.4770 0.1059 262.2026);
+  --card: oklch(0.9595 0.0080 253.8534);
+  --card-foreground: oklch(0.4770 0.1059 262.2026);
+  --popover: oklch(0.9595 0.0080 253.8534);
+  --popover-foreground: oklch(0.4770 0.1059 262.2026);
+  --primary: oklch(0.7196 0.1342 240.7828);
+  --primary-foreground: oklch(1.0000 0 0);
+  --secondary: oklch(0.9082 0.0243 253.9560);
+  --secondary-foreground: oklch(0.4770 0.1059 262.2026);
+  --muted: oklch(0.9153 0.0179 253.3450);
+  --muted-foreground: oklch(0.6494 0.0572 255.4961);
+  --accent: oklch(0.9747 0.0051 247.8765);
+  --accent-foreground: oklch(0.4770 0.1059 262.2026);
+  --destructive: oklch(0.7116 0.1812 22.8389);
+  --destructive-foreground: oklch(1.0000 0 0);
+  --border: oklch(0.9256 0.0155 257.1986);
+  --input: oklch(0.9595 0.0080 253.8534);
+  --ring: oklch(0.7196 0.1342 240.7828);
+  --chart-1: oklch(0.7196 0.1342 240.7828);
+  --chart-2: oklch(0.7816 0.1046 239.7224);
+  --chart-3: oklch(0.6196 0.1270 241.3708);
+  --chart-4: oklch(0.8364 0.0790 239.7703);
+  --chart-5: oklch(0.9000 0.0490 240.8151);
+  /* Categorical status palette — one hue per application status, ordered and
+     validated (adjacent CVD/contrast checks) for the pie-chart wrap-around. */
+  --status-wishlist: #2a78d6;
+  --status-applied: #eb6834;
+  --status-oa: #1baf7a;
+  --status-interview: #eda100;
+  --status-offer: #008300;
+  --status-rejected: #e34948;
+  --status-ghosted: #4a3aa7;
+  --status-withdrawn: #e87ba4;
+  --sidebar: oklch(0.9595 0.0080 253.8534);
+  --sidebar-foreground: oklch(0.4770 0.1059 262.2026);
+  --sidebar-primary: oklch(0.7196 0.1342 240.7828);
+  --sidebar-primary-foreground: oklch(1.0000 0 0);
+  --sidebar-accent: oklch(0.9153 0.0179 253.3450);
+  --sidebar-accent-foreground: oklch(0.4770 0.1059 262.2026);
+  --sidebar-border: oklch(0.9256 0.0155 257.1986);
+  --sidebar-ring: oklch(0.7196 0.1342 240.7828);
+  --font-sans: var(--font-poppins), sans-serif;
+  --font-serif: var(--font-lora), serif;
+  --font-mono: var(--font-fira-code), monospace;
+  --radius: 1.2rem;
+  --tracking-normal: -0.01em;
+  --spacing: 0.25rem;
+
+  /* Neumorphic elevation system — soft diffused dual shadows derived from
+     the surface color. All raised/pressed utilities below read from these. */
+  --neu-dark: oklch(0.7 0.02 255 / 0.55);
+  --neu-light: oklch(1 0 0 / 0.85);
+  --neu-dark-strong: oklch(0.66 0.025 255 / 0.65);
+
+  --shadow-raised-sm: 3px 3px 6px var(--neu-dark), -3px -3px 6px var(--neu-light);
+  --shadow-raised: 7px 7px 15px var(--neu-dark), -7px -7px 15px var(--neu-light);
+  --shadow-raised-lg: 12px 12px 26px var(--neu-dark-strong), -10px -10px 22px var(--neu-light);
+  --shadow-pressed-sm: inset 2px 2px 5px var(--neu-dark), inset -2px -2px 5px var(--neu-light);
+  --shadow-pressed: inset 4px 4px 9px var(--neu-dark), inset -4px -4px 9px var(--neu-light);
+  --shadow-2xs: var(--shadow-raised-sm);
+  --shadow-xs: var(--shadow-raised-sm);
+  --shadow-sm: var(--shadow-raised-sm);
+  --shadow: var(--shadow-raised);
+  --shadow-md: var(--shadow-raised);
+  --shadow-lg: var(--shadow-raised-lg);
+  --shadow-xl: var(--shadow-raised-lg);
+  --shadow-2xl: var(--shadow-raised-lg);
+}
+
+.dark {
+  --background: oklch(0.2341 0.0106 260.6862);
+  --foreground: oklch(0.8857 0.0216 259.1916);
+  --card: oklch(0.2341 0.0106 260.6862);
+  --card-foreground: oklch(0.8857 0.0216 259.1916);
+  --popover: oklch(0.2341 0.0106 260.6862);
+  --popover-foreground: oklch(0.8857 0.0216 259.1916);
+  --primary: oklch(0.7196 0.1342 240.7828);
+  --primary-foreground: oklch(0.2341 0.0106 260.6862);
+  --secondary: oklch(0.2830 0.0147 256.7920);
+  --secondary-foreground: oklch(0.8857 0.0216 259.1916);
+  --muted: oklch(0.2830 0.0147 256.7920);
+  --muted-foreground: oklch(0.5740 0.0344 254.4306);
+  --accent: oklch(0.3182 0.0188 254.7887);
+  --accent-foreground: oklch(1.0000 0 0);
+  --destructive: oklch(0.7116 0.1812 22.8389);
+  --destructive-foreground: oklch(1.0000 0 0);
+  --border: oklch(0.3182 0.0188 254.7887);
+  --input: oklch(0.2341 0.0106 260.6862);
+  --ring: oklch(0.7196 0.1342 240.7828);
+  --chart-1: oklch(0.7196 0.1342 240.7828);
+  --chart-2: oklch(0.7816 0.1046 239.7224);
+  --chart-3: oklch(0.6196 0.1270 241.3708);
+  --chart-4: oklch(0.8364 0.0790 239.7703);
+  --chart-5: oklch(0.9000 0.0490 240.8151);
+  --status-wishlist: #3987e5;
+  --status-applied: #d95926;
+  --status-oa: #199e70;
+  --status-interview: #c98500;
+  --status-offer: #008300;
+  --status-rejected: #e66767;
+  --status-ghosted: #9085e9;
+  --status-withdrawn: #d55181;
+  --sidebar: oklch(0.2341 0.0106 260.6862);
+  --sidebar-foreground: oklch(0.8857 0.0216 259.1916);
+  --sidebar-primary: oklch(0.7196 0.1342 240.7828);
+  --sidebar-primary-foreground: oklch(0.2341 0.0106 260.6862);
+  --sidebar-accent: oklch(0.2830 0.0147 256.7920);
+  --sidebar-accent-foreground: oklch(1.0000 0 0);
+  --sidebar-border: oklch(0.3182 0.0188 254.7887);
+  --sidebar-ring: oklch(0.7196 0.1342 240.7828);
+  --font-sans: var(--font-poppins), sans-serif;
+  --font-serif: var(--font-lora), serif;
+  --font-mono: var(--font-fira-code), monospace;
+  --radius: 1.2rem;
+
+  --neu-dark: oklch(0.08 0.01 260 / 0.65);
+  --neu-light: oklch(0.32 0.015 260 / 0.55);
+  --neu-dark-strong: oklch(0.05 0.01 260 / 0.75);
+
+  --shadow-raised-sm: 3px 3px 6px var(--neu-dark), -3px -3px 6px var(--neu-light);
+  --shadow-raised: 7px 7px 15px var(--neu-dark), -7px -7px 15px var(--neu-light);
+  --shadow-raised-lg: 12px 12px 26px var(--neu-dark-strong), -10px -10px 22px var(--neu-light);
+  --shadow-pressed-sm: inset 2px 2px 5px var(--neu-dark), inset -2px -2px 5px var(--neu-light);
+  --shadow-pressed: inset 4px 4px 9px var(--neu-dark), inset -4px -4px 9px var(--neu-light);
+  --shadow-2xs: var(--shadow-raised-sm);
+  --shadow-xs: var(--shadow-raised-sm);
+  --shadow-sm: var(--shadow-raised-sm);
+  --shadow: var(--shadow-raised);
+  --shadow-md: var(--shadow-raised);
+  --shadow-lg: var(--shadow-raised-lg);
+  --shadow-xl: var(--shadow-raised-lg);
+  --shadow-2xl: var(--shadow-raised-lg);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-status-wishlist: var(--status-wishlist);
+  --color-status-applied: var(--status-applied);
+  --color-status-oa: var(--status-oa);
+  --color-status-interview: var(--status-interview);
+  --color-status-offer: var(--status-offer);
+  --color-status-rejected: var(--status-rejected);
+  --color-status-ghosted: var(--status-ghosted);
+  --color-status-withdrawn: var(--status-withdrawn);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --font-serif: var(--font-serif);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --shadow-2xs: var(--shadow-2xs);
+  --shadow-xs: var(--shadow-xs);
+  --shadow-sm: var(--shadow-sm);
+  --shadow: var(--shadow);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+  --shadow-xl: var(--shadow-xl);
+  --shadow-2xl: var(--shadow-2xl);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* ---- Neumorphic surface utilities ----
+   Raised = element pops above the surface. Pressed = element is sunken
+   into it. Both read the same physical light source, so they compose
+   consistently across the whole app. */
+
+@utility neu-flat {
+  background-color: var(--background);
+}
+
+@utility neu-raised-sm {
+  background-color: var(--background);
+  box-shadow: var(--shadow-raised-sm);
+}
+
+@utility neu-raised {
+  background-color: var(--background);
+  box-shadow: var(--shadow-raised);
+}
+
+@utility neu-raised-lg {
+  background-color: var(--background);
+  box-shadow: var(--shadow-raised-lg);
+}
+
+@utility neu-pressed-sm {
+  background-color: var(--background);
+  box-shadow: var(--shadow-pressed-sm);
+}
+
+@utility neu-pressed {
+  background-color: var(--background);
+  box-shadow: var(--shadow-pressed);
+}
+
+@utility neu-active {
+  background-color: color-mix(in oklch, var(--primary) 14%, var(--background));
+  color: var(--primary);
+  box-shadow: var(--shadow-pressed-sm);
+}
+
+@utility neu-focus-ring {
+  outline: none;
+  box-shadow: var(--shadow-pressed-sm), 0 0 0 3px color-mix(in oklch, var(--ring) 45%, transparent);
+}
+
+@utility neu-transition {
+  transition-property: box-shadow, background-color, color, transform;
+  transition-duration: 180ms;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
   }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  body {
+    @apply bg-background text-foreground;
+  }
 }

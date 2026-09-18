@@ -1,0 +1,241 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum GroupRole {
+  OWNER
+  MEMBER
+}
+
+enum ApplicationStatus {
+  WISHLIST
+  APPLIED
+  OA
+  INTERVIEW
+  OFFER
+  REJECTED
+  GHOSTED
+  WITHDRAWN
+}
+
+enum ApplicationSource {
+  MANUAL
+  AI_DUMP
+}
+
+enum ProficiencyLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+  EXPERT
+  NATIVE
+}
+
+/// Identitas yang disinkronkan dari Clerk lewat webhook (`user.created` dkk).
+/// `clerkId` adalah sumber kebenaran untuk siapa user-nya; baris ini hanya
+/// salinan lokal supaya bisa dijadikan relasi FK oleh Prisma.
+model Account {
+  id        String   @id @default(cuid())
+  clerkId   String   @unique
+  name      String
+  email     String?  @unique
+  imageUrl  String?
+  /// Nomor WA (format E.164, mis. "+6281234567890"), diisi sendiri oleh user di
+  /// halaman profil. Dipakai bot WhatsApp (lihat whatsapp-bot/) untuk mencocokkan
+  /// pengirim pesan grup dengan Account ini -- lihat AccountService.findByWhatsappPhone.
+  whatsappPhone String?  @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships         GroupMember[]
+  applications        JobApplication[]
+  applicationStatuses ApplicationMemberStatus[]
+  profile             PersonalProfile?
+
+  @@index([email])
+}
+
+/// Sebuah "server"/grup tempat teman-teman berkumpul untuk berbagi papan
+/// lamaran kerja. Semua anggota melihat semua lamaran dalam grup yang sama
+/// (shared board), bukan cuma milik mereka sendiri.
+model Group {
+  id         String   @id @default(cuid())
+  name       String
+  /// Kode undangan pendek (mis. "K3F9QX2A") — dipakai teman untuk join lewat
+  /// /join/[code]. Bisa di-regenerate oleh owner supaya kode lama tidak valid lagi.
+  inviteCode String   @unique
+  /// JID grup WhatsApp (mis. "1203xxxxxxxx@g.us") yang di-link ke grup ini lewat
+  /// halaman settings -- lihat whatsapp-bot/. Pesan "/loker ..." dari grup WA ini
+  /// akan ditambahkan sebagai JobApplication di grup ini.
+  whatsappGroupJid String?  @unique
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  members      GroupMember[]
+  applications JobApplication[]
+}
+
+/// Relasi many-to-many Account <-> Group, dengan role per membership.
+/// Role pertama yang membuat grup otomatis jadi OWNER (lihat GroupService.create).
+model GroupMember {
+  id        String    @id @default(cuid())
+  group     Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  groupId   String
+  account   Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  accountId String
+  role      GroupRole @default(MEMBER)
+
+  joinedAt DateTime @default(now())
+
+  @@unique([groupId, accountId])
+  @@index([accountId])
+}
+
+/// Satu lamaran kerja di dalam sebuah grup. Bisa diisi manual lewat form, atau
+/// lewat AI dump (tempel teks bebas -> Claude mengekstrak field-fieldnya, lihat
+/// lib/ai/parse-job-dump.ts) -- `source` dan `rawDumpText` menyimpan jejaknya.
+model JobApplication {
+  id      String @id @default(cuid())
+  group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  groupId String
+
+  /// Siapa yang menambahkan entri ini -- dipakai atribusi di shared board,
+  /// bukan untuk membatasi visibility (semua anggota grup bisa lihat/edit).
+  createdBy   Account @relation(fields: [createdById], references: [id])
+  createdById String
+
+  company  String
+  position String
+  location String?
+  jobUrl   String?
+  salary   String?
+
+  /// Catatan bebas, disimpan sebagai HTML dari rich text editor (Tiptap).
+  notes String?
+
+  source      ApplicationSource @default(MANUAL)
+  /// Teks asli yang ditempel ke AI dump, disimpan untuk referensi/debug ekstraksi.
+  rawDumpText String?
+
+  attachments    JobApplicationAttachment[]
+  /// Status/tanggal apply tiap anggota grup terhadap lowongan ini -- lihat
+  /// ApplicationMemberStatus. Tiap member punya progress sendiri-sendiri.
+  memberStatuses ApplicationMemberStatus[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([groupId, createdAt])
+  @@index([createdById])
+}
+
+/// Progress satu anggota grup terhadap satu lowongan (JobApplication) --
+/// lowongan itu shared/ditambahkan oleh siapa saja, tapi status "sudah
+/// apply/interview/offer/dst" dan tanggalnya per-orang, bukan satu nilai
+/// bersama. Baris di sini dibuat lazily lewat upsert saat member pertama kali
+/// mengubah status mereka sendiri untuk suatu lowongan; belum punya baris =
+/// default WISHLIST di level aplikasi (lihat JobApplicationService).
+model ApplicationMemberStatus {
+  id            String         @id @default(cuid())
+  application   JobApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  applicationId String
+  account       Account        @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  accountId     String
+
+  status    ApplicationStatus @default(WISHLIST)
+  appliedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([applicationId, accountId])
+  @@index([applicationId])
+  @@index([accountId])
+}
+
+/// File yang dilampirkan ke satu lamaran (offer letter, screenshot, dst),
+/// disimpan lewat UploadThing. `key` adalah UploadThing file key, dipakai
+/// untuk `utapi.deleteFiles()` saat lampiran dihapus (lihat lib/uploadthing.ts).
+model JobApplicationAttachment {
+  id            String         @id @default(cuid())
+  application   JobApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  applicationId String
+  url           String
+  key           String
+  name          String
+  createdAt     DateTime       @default(now())
+
+  @@index([applicationId])
+}
+
+/// "Personal Data Hold" -- profil pribadi tiap akun (CV terstruktur), diisi
+/// manual atau lewat AI dump (tempel teks CV/textarea -> Claude mengekstrak).
+/// Beda dari JobApplication: profil ini privat per akun, bukan shared per grup.
+///
+/// Setiap section (personalData, contactInfo, dst) adalah daftar field/entry
+/// bentuk bebas yang bisa ditambah/dihapus sendiri oleh user -- tidak ada set
+/// kolom yang wajib ada. Disimpan sebagai JSON (bukan dinormalisasi) karena tiap
+/// section selalu dibaca/ditulis utuh per profil, tidak pernah di-query per-item.
+/// Lihat servers/validators/personal-profile.validator.ts untuk shape tiap section
+/// dan lib/profile-defaults.ts untuk default field/label yang di-seed ke profil baru.
+model PersonalProfile {
+  id        String  @id @default(cuid())
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  accountId String  @unique
+
+  /// Array KeyValueField ({id,label,value}) -- mis. Fullname, Date of birth, Gender, dst.
+  personalData Json?
+  /// Array KeyValueField -- mis. Phone number, Email, Address, LinkedIn, dst.
+  contactInfo  Json?
+  /// Array Entry ({id, fields: KeyValueField[]}) -- satu entry per jenjang pendidikan.
+  educations     Json?
+  /// Array Entry -- satu entry per pengalaman kerja.
+  workExperience Json?
+  /// Array Entry -- satu entry per pengalaman organisasi.
+  organizations  Json?
+  /// Array SkillItem ({id,category,label,proficiency}) -- dikelompokkan bebas per category
+  /// (mis. "Soft Skill", "Hard Skill", "Programming Language"), tidak dibatasi enum.
+  skills    Json?
+  /// Array LanguageItem ({id,label,proficiency}) -- bahasa yang dikuasai, ditampilkan
+  /// sebagai pill dengan level.
+  languages Json?
+
+  /// Dokumen bebas yang diunggah user (KTP, ijazah, transkrip, foto, dst) -- lihat
+  /// ProfileDocument, label-nya teks bebas, tidak dibatasi field tetap.
+  documents ProfileDocument[]
+
+  /// Teks asli dump (CV/paste) yang terakhir dipakai untuk mengisi profil ini.
+  rawDumpText String?
+
+  /// Resume/CV PDF yang diunggah lewat UploadThing (lihat lib/uploadthing.ts).
+  /// `resumeKey` dipakai untuk `utapi.deleteFiles()` saat resume diganti/dihapus.
+  resumeUrl  String?
+  resumeName String?
+  resumeKey  String?
+
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+}
+
+/// Dokumen/file bebas yang dilampirkan ke profil (KTP, ijazah, transkrip nilai, KK,
+/// foto, dst). `label` adalah teks bebas yang diisi user sendiri saat upload -- bukan
+/// enum tetap -- supaya user bisa menambah jenis dokumen apa pun yang mereka perlukan
+/// tanpa perlu perubahan schema. Disimpan lewat UploadThing, sama seperti resume/
+/// JobApplicationAttachment.
+model ProfileDocument {
+  id        String          @id @default(cuid())
+  profile   PersonalProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  profileId String
+  label     String
+  url       String
+  key       String
+  name      String
+  createdAt DateTime        @default(now())
+
+  @@index([profileId])
+}
