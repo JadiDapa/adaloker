@@ -3,6 +3,7 @@ import type {
   KeyValueFieldDTO,
   PersonalProfileFormDTO,
   ProficiencyLevel,
+  SkillCategoryDTO,
 } from "@/servers/validators/personal-profile.validator";
 
 export const PROFICIENCY_LABELS: Record<ProficiencyLevel, string> = {
@@ -85,6 +86,14 @@ export function blankField(): KeyValueFieldDTO {
   return { id: newId(), label: "", value: "" };
 }
 
+export function emptySkillCategory(category = ""): SkillCategoryDTO {
+  return { id: newId(), category, skills: [] };
+}
+
+export function emptySkillCategories(): SkillCategoryDTO[] {
+  return DEFAULT_SKILL_CATEGORIES.map((category) => emptySkillCategory(category));
+}
+
 /** Seed values for a profile that has never been saved before. Once a profile exists,
  * its stored JSON (whatever fields the user kept) is used as-is -- this is only the
  * first-run default. */
@@ -95,7 +104,7 @@ export function emptyProfileForm(): PersonalProfileFormDTO {
     educations: [emptyEntry(DEFAULT_EDUCATION_ENTRY_LABELS)],
     workExperience: [emptyEntry(DEFAULT_WORK_ENTRY_LABELS)],
     organizations: [emptyEntry(DEFAULT_ORGANIZATION_ENTRY_LABELS)],
-    skills: [],
+    skills: emptySkillCategories(),
     languages: [],
   };
 }

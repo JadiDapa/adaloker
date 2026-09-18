@@ -1,7 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { UserButton } from "@clerk/nextjs";
-import { LayoutGrid, UserRound } from "lucide-react";
+import { LayoutGrid, UserRound, FileText } from "lucide-react";
 import { ToggleTheme } from "./ToggleTheme";
 import { NavLink } from "./NavLink";
 import { cn } from "@/lib/utils";
@@ -27,6 +27,9 @@ export function AppShell({
           </NavLink>
           <NavLink href="/profile" icon={<UserRound className="size-4" />}>
             Profile
+          </NavLink>
+          <NavLink href="/letters" icon={<FileText className="size-4" />}>
+            Letters
           </NavLink>
           <ToggleTheme />
           <UserButton />

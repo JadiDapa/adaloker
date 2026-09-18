@@ -16,6 +16,7 @@ export type Application = {
   location: string | null;
   jobUrl: string | null;
   salary: string | null;
+  sourcePlatform: string | null;
   notes: string | null;
   source: ApplicationSource;
   createdBy: { id: string; name: string; imageUrl: string | null };

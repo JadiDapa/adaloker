@@ -48,6 +48,7 @@ import { Badge } from "@/components/ui/badge";
 import { StatusBadge, statusLabel } from "./StatusBadge";
 import { ApplicationDetailSheet } from "./ApplicationDetailSheet";
 import { EditableField, SalaryField } from "./EditableField";
+import { SOURCE_PLATFORM_DATALIST_ID } from "./source-platforms";
 import {
   createJobApplication,
   deleteJobApplication,
@@ -64,7 +65,7 @@ type ColumnId =
   | "company"
   | "position"
   | "status"
-  | "appliedAt"
+  | "sourcePlatform"
   | "salary"
   | "appliedUsers"
   | "addedBy"
@@ -98,16 +99,16 @@ const COLUMNS: {
   {
     id: "status",
     label: "Status",
-    width: 140,
-    minWidth: 110,
+    width: 170,
+    minWidth: 130,
     resizable: true,
     sortable: true,
   },
   {
-    id: "appliedAt",
-    label: "Application Date",
-    width: 150,
-    minWidth: 120,
+    id: "sourcePlatform",
+    label: "Source",
+    width: 120,
+    minWidth: 90,
     resizable: true,
     sortable: true,
   },
@@ -166,10 +167,8 @@ function getSortValue(
       const status = getMemberStatus(app, viewerAccountId)?.status ?? "WISHLIST";
       return ApplicationStatusValues.indexOf(status);
     }
-    case "appliedAt": {
-      const appliedAt = getMemberStatus(app, viewerAccountId)?.appliedAt;
-      return appliedAt ? appliedAt.getTime() : -Infinity;
-    }
+    case "sourcePlatform":
+      return (app.sourcePlatform ?? "").toLowerCase();
     case "salary": {
       const digits = (app.salary ?? "").replace(/[^0-9]/g, "");
       return digits ? Number(digits) : -Infinity;
@@ -266,7 +265,7 @@ export function ApplicationsTable({
     const filtered = applications.filter((app) => {
       const matchesSearch =
         !query ||
-        [app.company, app.position, app.location ?? "", app.salary ?? ""].some(
+        [app.company, app.position, app.location ?? "", app.salary ?? "", app.sourcePlatform ?? ""].some(
           (field) => field.toLowerCase().includes(query),
         );
       const matchesStatus =
@@ -522,6 +521,7 @@ function QuickAddRow({ groupId }: { groupId: string }) {
         location: draft.location.trim(),
         jobUrl: "",
         salary: draft.salary.trim(),
+        sourcePlatform: "",
         status: "APPLIED",
         appliedAt: "",
         notes: "",
@@ -649,7 +649,7 @@ function ApplicationRow({
   };
 
   const handleFieldSave = (
-    field: "company" | "position" | "location" | "salary",
+    field: "company" | "position" | "location" | "salary" | "sourcePlatform",
     value: string,
   ) => {
     startTransition(async () => {
@@ -708,41 +708,49 @@ function ApplicationRow({
         />
       </TableCell>
       <TableCell>
-        <Select value={myStatus} onValueChange={handleStatusChange}>
-          <SelectTrigger className="h-auto w-auto border-none p-0 shadow-none [&_svg]:hidden">
-            <StatusBadge status={myStatus} />
-          </SelectTrigger>
-          <SelectContent>
-            {ApplicationStatusValues.map((s) => (
-              <SelectItem key={s} value={s}>
-                {statusLabel(s)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="flex flex-col items-start gap-1">
+          <Select value={myStatus} onValueChange={handleStatusChange}>
+            <SelectTrigger className="h-auto w-auto border-none p-0 shadow-none [&_svg]:hidden">
+              <StatusBadge status={myStatus} />
+            </SelectTrigger>
+            <SelectContent>
+              {ApplicationStatusValues.map((s) => (
+                <SelectItem key={s} value={s}>
+                  {statusLabel(s)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground h-auto px-1 py-0 text-xs font-normal"
+              >
+                <CalendarDays className="size-3" />
+                {myAppliedAt ? format(myAppliedAt, "MMM d, yyyy") : `${statusLabel(myStatus)} date`}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-auto space-y-2">
+              <Input
+                type="date"
+                defaultValue={
+                  myAppliedAt ? format(myAppliedAt, "yyyy-MM-dd") : ""
+                }
+                onChange={(e) => handleAppliedAtChange(e.target.value)}
+              />
+            </PopoverContent>
+          </Popover>
+        </div>
       </TableCell>
-      <TableCell className="text-muted-foreground text-sm">
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-auto px-1.5 py-1 font-normal"
-            >
-              <CalendarDays className="size-3.5" />
-              {myAppliedAt ? format(myAppliedAt, "MMM d, yyyy") : "Set date"}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent align="start" className="w-auto space-y-2">
-            <Input
-              type="date"
-              defaultValue={
-                myAppliedAt ? format(myAppliedAt, "yyyy-MM-dd") : ""
-              }
-              onChange={(e) => handleAppliedAtChange(e.target.value)}
-            />
-          </PopoverContent>
-        </Popover>
+      <TableCell className="text-muted-foreground overflow-hidden text-sm text-ellipsis">
+        <EditableField
+          value={application.sourcePlatform ?? ""}
+          onSave={(v) => handleFieldSave("sourcePlatform", v)}
+          placeholder="—"
+          list={SOURCE_PLATFORM_DATALIST_ID}
+        />
       </TableCell>
       <TableCell className="text-muted-foreground overflow-hidden text-sm text-ellipsis">
         <SalaryField

@@ -16,11 +16,14 @@ import { GroupService } from "@/servers/services/group.service";
 import { JobApplicationService } from "@/servers/services/job-application.service";
 import { parseJobDump } from "@/lib/ai/parse-job-dump";
 import { ApplicationSource } from "@/generated/prisma";
+import { format } from "date-fns";
 
 /** Prefix that triggers an AI-dump add — e.g. "/loker Backend Engineer @ Acme, remote, ...". */
 const TRIGGER_PREFIX = "/loker";
 /** Sent by any member (even unlinked ones) to reveal a group chat's JID for setup. */
 const ID_COMMAND = "/id";
+/** Replies with the sender's own job-tracking summary for this group's board. */
+const ME_COMMAND = "/me";
 
 const AUTH_DIR = path.join(__dirname, "auth");
 const logger = pino({ level: process.env.WHATSAPP_LOG_LEVEL || "warn" });
@@ -101,26 +104,23 @@ async function handleMessage(sock: ReturnType<typeof makeWASocket>, msg: WAMessa
   const text = extractText(msg)?.trim();
   if (!text) return;
 
-  if (text.toLowerCase() === ID_COMMAND) {
-    await sock.sendMessage(remoteJid, { text: `Group JID: ${remoteJid}` }, { quoted: msg });
+  const reply = (t: string) => sock.sendMessage(remoteJid, { text: t }, { quoted: msg });
+  const lowerText = text.toLowerCase();
+
+  if (lowerText === ID_COMMAND) {
+    await reply(`Group JID: ${remoteJid}`);
     return;
   }
 
-  if (!text.toLowerCase().startsWith(TRIGGER_PREFIX)) return;
-
-  const dumpText = text.slice(TRIGGER_PREFIX.length).trim();
-  const reply = (t: string) => sock.sendMessage(remoteJid, { text: t }, { quoted: msg });
+  const isMeCommand = lowerText === ME_COMMAND;
+  const isLokerCommand = lowerText.startsWith(TRIGGER_PREFIX);
+  if (!isMeCommand && !isLokerCommand) return;
 
   const group = await GroupService.findByWhatsappJid(remoteJid);
   if (!group) {
     await reply(
       "This group isn't linked to an Adaloker board yet. Ask the group owner to link it from Group settings (send \"/id\" here to get the JID to paste).",
     );
-    return;
-  }
-
-  if (!dumpText) {
-    await reply(`Send "${TRIGGER_PREFIX}" followed by the job posting/email/notes to add it.`);
     return;
   }
 
@@ -144,6 +144,31 @@ async function handleMessage(sock: ReturnType<typeof makeWASocket>, msg: WAMessa
     return;
   }
 
+  if (isMeCommand) {
+    const overview = await JobApplicationService.getMemberOverview(group.id, account.id);
+
+    const lines = [
+      `📊 Your job tracking in "${group.name}"`,
+      `Total loker: ${overview.total}`,
+      `Wishlisted: ${overview.wishlisted}`,
+      overview.latest
+        ? `Latest loker: ${overview.latest.position} @ ${overview.latest.company} (${format(overview.latest.createdAt, "MMM d, yyyy")})`
+        : "Latest loker: none yet",
+      overview.nearestInterview
+        ? `Nearest wawancara: ${overview.nearestInterview.application.position} @ ${overview.nearestInterview.application.company} — ${format(overview.nearestInterview.appliedAt!, "MMM d, yyyy")}`
+        : "Nearest wawancara: none scheduled",
+    ];
+
+    await reply(lines.join("\n"));
+    return;
+  }
+
+  const dumpText = text.slice(TRIGGER_PREFIX.length).trim();
+  if (!dumpText) {
+    await reply(`Send "${TRIGGER_PREFIX}" followed by the job posting/email/notes to add it.`);
+    return;
+  }
+
   let extracted;
   try {
     extracted = await parseJobDump(dumpText);
@@ -160,6 +185,7 @@ async function handleMessage(sock: ReturnType<typeof makeWASocket>, msg: WAMessa
     location: extracted.location,
     jobUrl: extracted.jobUrl,
     salary: extracted.salary,
+    sourcePlatform: extracted.sourcePlatform,
     status: extracted.status,
     appliedAt: extracted.appliedAt ? new Date(extracted.appliedAt) : null,
     notes: extracted.notes,
@@ -172,6 +198,7 @@ async function handleMessage(sock: ReturnType<typeof makeWASocket>, msg: WAMessa
     `${extracted.position} @ ${extracted.company}`,
     extracted.location ? `Location: ${extracted.location}` : undefined,
     extracted.salary ? `Salary: ${extracted.salary}` : undefined,
+    extracted.sourcePlatform ? `Source: ${extracted.sourcePlatform}` : undefined,
     `Status: ${extracted.status}`,
     extracted.notes ? `Notes: ${extracted.notes}` : undefined,
   ].filter(Boolean);

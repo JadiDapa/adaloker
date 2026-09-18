@@ -9,6 +9,7 @@ export type JobApplicationCreateData = {
   location?: string | null;
   jobUrl?: string | null;
   salary?: string | null;
+  sourcePlatform?: string | null;
   /** Seeds the creator's own member-status row — other members start at WISHLIST. */
   status: ApplicationStatus;
   appliedAt?: Date | null;
@@ -81,6 +82,47 @@ export const JobApplicationService = {
 
   async delete(id: string) {
     return prisma.jobApplication.delete({ where: { id } });
+  },
+
+  /** Summary for the WhatsApp bot's "/me" command — one member's view of one group's
+   * shared board. A member with no `ApplicationMemberStatus` row for an application is
+   * WISHLIST by convention (see the model comment), so wishlisted = total - (rows with
+   * a non-WISHLIST status). "Nearest wawancara" reuses `appliedAt` as the date attached
+   * to whatever the member's current status is (see ApplicationDetailSheet — it's not
+   * strictly an "applied" date, the UI lets you set it for any status including
+   * INTERVIEW), filtered to today-or-later and closest first. */
+  async getMemberOverview(groupId: string, accountId: string) {
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    const [total, nonWishlistCount, latest, nearestInterview] = await Promise.all([
+      prisma.jobApplication.count({ where: { groupId } }),
+      prisma.applicationMemberStatus.count({
+        where: { accountId, status: { not: ApplicationStatus.WISHLIST }, application: { groupId } },
+      }),
+      prisma.jobApplication.findFirst({
+        where: { groupId },
+        orderBy: { createdAt: "desc" },
+        select: { company: true, position: true, createdAt: true },
+      }),
+      prisma.applicationMemberStatus.findFirst({
+        where: {
+          accountId,
+          status: ApplicationStatus.INTERVIEW,
+          appliedAt: { gte: startOfToday },
+          application: { groupId },
+        },
+        orderBy: { appliedAt: "asc" },
+        select: { appliedAt: true, application: { select: { company: true, position: true } } },
+      }),
+    ]);
+
+    return {
+      total,
+      wishlisted: total - nonWishlistCount,
+      latest,
+      nearestInterview,
+    };
   },
 
   async addAttachment(

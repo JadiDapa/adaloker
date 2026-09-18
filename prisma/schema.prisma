@@ -21,11 +21,15 @@ enum ApplicationStatus {
   REJECTED
   GHOSTED
   WITHDRAWN
+  /// The member decided not to pursue this loker — distinct from REJECTED (employer
+  /// said no) and WITHDRAWN (pulled out after applying).
+  NOT_INTERESTED
 }
 
 enum ApplicationSource {
   MANUAL
   AI_DUMP
+  URL_DUMP
 }
 
 enum ProficiencyLevel {
@@ -114,6 +118,11 @@ model JobApplication {
   location String?
   jobUrl   String?
   salary   String?
+  /// Platform tempat loker ini ditemukan/dilamar (mis. "LinkedIn", "Glints",
+  /// "Disnaker", "JobStreet") -- free text, bukan enum, supaya user bisa menambah
+  /// platform baru kapan saja tanpa perlu migration. Beda dari `source` di bawah,
+  /// yang berarti "lewat cara apa entri ini dibuat di app" (manual/AI dump/URL).
+  sourcePlatform String?
 
   /// Catatan bebas, disimpan sebagai HTML dari rich text editor (Tiptap).
   notes String?
@@ -198,8 +207,8 @@ model PersonalProfile {
   workExperience Json?
   /// Array Entry -- satu entry per pengalaman organisasi.
   organizations  Json?
-  /// Array SkillItem ({id,category,label,proficiency}) -- dikelompokkan bebas per category
-  /// (mis. "Soft Skill", "Hard Skill", "Programming Language"), tidak dibatasi enum.
+  /// Array SkillCategory ({id,category,skills:string[]}) -- tiap category (mis. "Soft
+  /// Skill", "Hard Skill") menampung beberapa tag skill bebas, tanpa proficiency.
   skills    Json?
   /// Array LanguageItem ({id,label,proficiency}) -- bahasa yang dikuasai, ditampilkan
   /// sebagai pill dengan level.
@@ -218,8 +227,46 @@ model PersonalProfile {
   resumeName String?
   resumeKey  String?
 
+  /// Template surat lamaran yang ditulis sendiri oleh user, berisi placeholder
+  /// `{{date}}`, `{{company}}`, `{{position}}` yang disubstitusi tiap kali generate
+  /// satu ApplicationLetter baru -- lihat ApplicationLetterService/lib/pdf.
+  letterTemplate String?
+
+  letters ApplicationLetter[]
+
   updatedAt DateTime @updatedAt
   createdAt DateTime @default(now())
+}
+
+/// Satu surat lamaran hasil generate dari `PersonalProfile.letterTemplate` dengan
+/// placeholder tanggal/perusahaan/posisi yang sudah disubstitusi, dirender jadi PDF
+/// dan diunggah ke UploadThing. `content` menyimpan snapshot teks yang sudah
+/// disubstitusi supaya perubahan template selanjutnya tidak mengubah surat lama.
+///
+/// Retensi: hanya disimpan 7 hari (`expiresAt` = createdAt + 7 hari) -- baik baris DB
+/// maupun file PDF-nya dihapus setelah itu. Dibersihkan lazily tiap kali surat di-list
+/// (lihat ApplicationLetterService.listActive) dan lewat script mandiri
+/// `scripts/cleanup-expired-application-letters.ts` untuk yang tidak pernah dibuka lagi.
+model ApplicationLetter {
+  id        String          @id @default(cuid())
+  profile   PersonalProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  profileId String
+
+  date        DateTime
+  companyName String
+  position    String
+  /// Teks surat lengkap (template dengan placeholder sudah disubstitusi).
+  content     String
+
+  pdfUrl  String
+  pdfKey  String
+  pdfName String
+
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([profileId])
+  @@index([expiresAt])
 }
 
 /// Dokumen/file bebas yang dilampirkan ke profil (KTP, ijazah, transkrip nilai, KK,

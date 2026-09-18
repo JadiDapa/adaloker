@@ -30,15 +30,17 @@ export type EntryDTO = z.infer<typeof EntrySchema>;
 
 export const EntryListSchema = z.array(EntrySchema).max(30);
 
-export const SkillItemSchema = z.object({
+/** One skill category (e.g. "Soft Skill") holding a plain list of tags (e.g. "Public
+ * speaking", "Leadership") -- no proficiency, just a flat list of things under that
+ * category. Categories themselves are free text, not an enum, so the user can add more. */
+export const SkillCategorySchema = z.object({
   id: z.string(),
   category: z.string().trim().min(1, "Category is required").max(100),
-  label: z.string().trim().min(1, "Skill name is required").max(100),
-  proficiency: ProficiencyLevelSchema,
+  skills: z.array(z.string().trim().min(1)).max(100),
 });
-export type SkillItemDTO = z.infer<typeof SkillItemSchema>;
+export type SkillCategoryDTO = z.infer<typeof SkillCategorySchema>;
 
-export const SkillListSchema = z.array(SkillItemSchema).max(200);
+export const SkillListSchema = z.array(SkillCategorySchema).max(50);
 
 export const LanguageItemSchema = z.object({
   id: z.string(),

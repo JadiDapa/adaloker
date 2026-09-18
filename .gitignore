@@ -47,6 +47,9 @@ next-env.d.ts
 # whatsapp bot session (contains auth keys — never commit)
 /whatsapp-bot/auth
 
+# database backups (contain real user data — never commit)
+/backups
+
 /.claude
 
 /.agents

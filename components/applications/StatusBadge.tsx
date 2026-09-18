@@ -11,6 +11,7 @@ const STATUS_LABEL: Record<ApplicationStatus, string> = {
   REJECTED: "Rejected",
   GHOSTED: "Ghosted",
   WITHDRAWN: "Withdrawn",
+  NOT_INTERESTED: "Not interested",
 };
 
 const STATUS_CLASS: Record<ApplicationStatus, string> = {
@@ -22,6 +23,7 @@ const STATUS_CLASS: Record<ApplicationStatus, string> = {
   REJECTED: "bg-status-rejected/15 text-status-rejected",
   GHOSTED: "bg-status-ghosted/15 text-status-ghosted",
   WITHDRAWN: "bg-status-withdrawn/15 text-status-withdrawn",
+  NOT_INTERESTED: "bg-status-not-interested/15 text-status-not-interested",
 };
 
 /** Status → categorical chart color, kept in sync with the badge palette above. */
@@ -34,6 +36,7 @@ export const STATUS_COLOR_VAR: Record<ApplicationStatus, string> = {
   REJECTED: "var(--status-rejected)",
   GHOSTED: "var(--status-ghosted)",
   WITHDRAWN: "var(--status-withdrawn)",
+  NOT_INTERESTED: "var(--status-not-interested)",
 };
 
 export function statusLabel(status: ApplicationStatus) {

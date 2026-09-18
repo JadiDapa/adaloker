@@ -16,10 +16,10 @@ import { saveProfile, saveProfileFromDump, parseProfileDumpAction } from "@/app/
 import {
   DEFAULT_EDUCATION_ENTRY_LABELS,
   DEFAULT_ORGANIZATION_ENTRY_LABELS,
-  DEFAULT_WORK_ENTRY_LABELS,
 } from "@/lib/profile-defaults";
 import { KeyValueSection } from "./KeyValueSection";
 import { EntryListSection } from "./EntryListSection";
+import { WorkExperienceSection } from "./WorkExperienceSection";
 import { SkillsSection } from "./SkillsSection";
 import { LanguagesSection } from "./LanguagesSection";
 
@@ -138,16 +138,13 @@ export function ProfileForm({ defaultValues }: { defaultValues: PersonalProfileF
         <Card>
           <CardHeader>
             <CardTitle>Work Experience</CardTitle>
+            <CardDescription>
+              Edit most fields directly in the table — open the notebook icon for the detail
+              field (and everything else on that row).
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <EntryListSection
-              control={control}
-              register={register}
-              name="workExperience"
-              defaultLabels={DEFAULT_WORK_ENTRY_LABELS}
-              addLabel="Add work experience"
-              emptyLabel="No work experience added yet."
-            />
+            <WorkExperienceSection control={control} />
           </CardContent>
         </Card>
 
@@ -173,7 +170,7 @@ export function ProfileForm({ defaultValues }: { defaultValues: PersonalProfileF
             <CardDescription>Group them under whatever categories make sense to you.</CardDescription>
           </CardHeader>
           <CardContent>
-            <SkillsSection control={control} register={register} />
+            <SkillsSection control={control} />
           </CardContent>
         </Card>
 

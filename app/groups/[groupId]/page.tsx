@@ -6,6 +6,7 @@ import { AppShell } from "@/components/shared/AppShell";
 import { AddApplicationDialog } from "@/components/applications/AddApplicationDialog";
 import { ApplicationsTable } from "@/components/applications/ApplicationsTable";
 import { ApplicationStats } from "@/components/applications/ApplicationStats";
+import { SourcePlatformDatalist } from "@/components/applications/source-platforms";
 import { Button } from "@/components/ui/button";
 import { Settings } from "lucide-react";
 
@@ -22,6 +23,7 @@ export default async function GroupBoardPage({ params }: PageProps<"/groups/[gro
 
   return (
     <AppShell contentClassName="max-w-[1440px]">
+      <SourcePlatformDatalist />
       <div className="mb-6 flex items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">{group.name}</h1>

@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { Plus, Sparkles } from "lucide-react";
+import { Plus, Sparkles, Link as LinkIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,7 +30,9 @@ import {
   createJobApplication,
   createJobApplicationFromDump,
   parseJobApplicationDump,
+  parseJobApplicationUrl,
 } from "@/app/action/job-application.action";
+import { SOURCE_PLATFORM_DATALIST_ID } from "./source-platforms";
 
 const EMPTY_FORM: JobApplicationFormDTO = {
   company: "",
@@ -38,6 +40,7 @@ const EMPTY_FORM: JobApplicationFormDTO = {
   location: "",
   jobUrl: "",
   salary: "",
+  sourcePlatform: "",
   status: "APPLIED",
   appliedAt: "",
   notes: "",
@@ -69,6 +72,10 @@ export function AddApplicationDialog({ groupId }: { groupId: string }) {
                 <Sparkles className="size-4" />
                 AI dump
               </TabsTrigger>
+              <TabsTrigger value="url" className="flex-1">
+                <LinkIcon className="size-4" />
+                From URL
+              </TabsTrigger>
               <TabsTrigger value="manual" className="flex-1">
                 Manual
               </TabsTrigger>
@@ -82,6 +89,9 @@ export function AddApplicationDialog({ groupId }: { groupId: string }) {
             </TabsContent>
             <TabsContent value="dump">
               <AiDumpFlow groupId={groupId} onDone={() => setOpen(false)} />
+            </TabsContent>
+            <TabsContent value="url">
+              <UrlDumpFlow groupId={groupId} onDone={() => setOpen(false)} />
             </TabsContent>
           </Tabs>
         </div>
@@ -108,6 +118,7 @@ function AiDumpFlow({ groupId, onDone }: { groupId: string; onDone: () => void }
         location: result.data.location ?? "",
         jobUrl: result.data.jobUrl ?? "",
         salary: result.data.salary ?? "",
+        sourcePlatform: result.data.sourcePlatform ?? "",
         status: result.data.status,
         appliedAt: result.data.appliedAt ?? "",
         notes: result.data.notes ?? "",
@@ -156,15 +167,89 @@ function AiDumpFlow({ groupId, onDone }: { groupId: string; onDone: () => void }
   );
 }
 
+function UrlDumpFlow({ groupId, onDone }: { groupId: string; onDone: () => void }) {
+  const [isPending, startTransition] = useTransition();
+  const [url, setUrl] = useState("");
+  const [extracted, setExtracted] = useState<JobApplicationFormDTO | null>(null);
+
+  const handleParse = () => {
+    startTransition(async () => {
+      const result = await parseJobApplicationUrl(groupId, url);
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      setExtracted({
+        company: result.data.company,
+        position: result.data.position,
+        location: result.data.location ?? "",
+        jobUrl: result.data.jobUrl ?? url,
+        salary: result.data.salary ?? "",
+        sourcePlatform: result.data.sourcePlatform ?? "",
+        status: result.data.status,
+        appliedAt: result.data.appliedAt ?? "",
+        notes: result.data.notes ?? "",
+      });
+    });
+  };
+
+  if (extracted) {
+    return (
+      <div className="space-y-4 pt-2">
+        <p className="text-muted-foreground text-sm">
+          Review what the AI found, fix anything off, then save.
+        </p>
+        <ApplicationForm
+          groupId={groupId}
+          defaultValues={extracted}
+          rawDumpText={url}
+          source="URL_DUMP"
+          onDone={onDone}
+        />
+        <Button variant="ghost" size="sm" onClick={() => setExtracted(null)}>
+          Back to URL
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4 pt-2">
+      <div className="space-y-2">
+        <Label htmlFor="dump-url">Job posting URL</Label>
+        <Input
+          id="dump-url"
+          type="url"
+          placeholder="https://www.jobstreet.co.id/job/..."
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+        />
+        <p className="text-muted-foreground text-xs">
+          Works for most job listing pages. Sites that require login (e.g. LinkedIn) may not
+          work — paste the text into &ldquo;AI dump&rdquo; instead.
+        </p>
+      </div>
+      <div className="flex justify-end">
+        <Button type="button" onClick={handleParse} disabled={isPending || !url.trim()}>
+          <LinkIcon className="size-4" />
+          {isPending ? "Fetching..." : "Fetch & parse"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function ApplicationForm({
   groupId,
   defaultValues,
   rawDumpText,
+  source,
   onDone,
 }: {
   groupId: string;
   defaultValues: JobApplicationFormDTO;
   rawDumpText?: string;
+  source?: "AI_DUMP" | "URL_DUMP";
   onDone: () => void;
 }) {
   const [isPending, startTransition] = useTransition();
@@ -185,7 +270,7 @@ function ApplicationForm({
   const onSubmit = (data: JobApplicationFormDTO) => {
     startTransition(async () => {
       const result = rawDumpText
-        ? await createJobApplicationFromDump(groupId, data, rawDumpText)
+        ? await createJobApplicationFromDump(groupId, data, rawDumpText, source ?? "AI_DUMP")
         : await createJobApplication(groupId, data);
 
       if (!result.ok) {
@@ -223,9 +308,20 @@ function ApplicationForm({
           <Input id="salary" {...register("salary")} />
         </div>
       </div>
-      <div className="space-y-2">
-        <Label htmlFor="jobUrl">Job URL</Label>
-        <Input id="jobUrl" {...register("jobUrl")} />
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="jobUrl">Job URL</Label>
+          <Input id="jobUrl" {...register("jobUrl")} />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="sourcePlatform">Source</Label>
+          <Input
+            id="sourcePlatform"
+            list={SOURCE_PLATFORM_DATALIST_ID}
+            placeholder="LinkedIn, Glints, JobStreet..."
+            {...register("sourcePlatform")}
+          />
+        </div>
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">

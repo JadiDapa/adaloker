@@ -193,12 +193,9 @@ export function mapExtractedProfileToForm(extracted: ExtractedProfile): Personal
     };
   });
 
-  const skills = extracted.skills.map((label) => ({
-    id: crypto.randomUUID(),
-    category: "Hard Skill",
-    label,
-    proficiency: "INTERMEDIATE" as const,
-  }));
+  const skills = extracted.skills.length
+    ? [{ id: crypto.randomUUID(), category: "Hard Skill", skills: extracted.skills }]
+    : [];
 
   const languages = extracted.languages.map((label) => ({
     id: crypto.randomUUID(),

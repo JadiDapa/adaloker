@@ -23,6 +23,7 @@ const STATUS_DESCRIPTION: Record<ApplicationStatus, string> = {
   REJECTED: "Didn't move forward",
   GHOSTED: "No response after contact",
   WITHDRAWN: "You withdrew this one",
+  NOT_INTERESTED: "You decided to skip this one",
 };
 
 export function ApplicationStats({

@@ -54,6 +54,7 @@
   --status-rejected: #e34948;
   --status-ghosted: #4a3aa7;
   --status-withdrawn: #e87ba4;
+  --status-not-interested: #6b7280;
   --sidebar: oklch(0.9595 0.0080 253.8534);
   --sidebar-foreground: oklch(0.4770 0.1059 262.2026);
   --sidebar-primary: oklch(0.7196 0.1342 240.7828);
@@ -123,6 +124,7 @@
   --status-rejected: #e66767;
   --status-ghosted: #9085e9;
   --status-withdrawn: #d55181;
+  --status-not-interested: #9ca3af;
   --sidebar: oklch(0.2341 0.0106 260.6862);
   --sidebar-foreground: oklch(0.8857 0.0216 259.1916);
   --sidebar-primary: oklch(0.7196 0.1342 240.7828);
@@ -188,6 +190,7 @@
   --color-status-rejected: var(--status-rejected);
   --color-status-ghosted: var(--status-ghosted);
   --color-status-withdrawn: var(--status-withdrawn);
+  --color-status-not-interested: var(--status-not-interested);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);

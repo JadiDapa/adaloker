@@ -38,6 +38,7 @@ export function EditableField({
   required,
   variant = "inline",
   className,
+  list,
 }: {
   value: string;
   onSave: (value: string) => void;
@@ -45,6 +46,8 @@ export function EditableField({
   required?: boolean;
   variant?: Variant;
   className?: string;
+  /** Id of a <datalist> to attach for autocomplete suggestions — free text still works. */
+  list?: string;
 }) {
   const [draft, setDraft] = useSyncedDraft(value);
 
@@ -71,6 +74,7 @@ export function EditableField({
         }
       }}
       placeholder={placeholder}
+      list={list}
       className={cn(
         "w-full min-w-0 border-none outline-none",
         VARIANT_CLASSES[variant],

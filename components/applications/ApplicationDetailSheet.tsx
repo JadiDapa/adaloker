@@ -4,7 +4,8 @@ import { type ReactNode, useTransition } from "react";
 import { toast } from "sonner";
 import Link from "next/link";
 import { format } from "date-fns";
-import { ExternalLink, Sparkles } from "lucide-react";
+import { Ban, ExternalLink, Sparkles } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
   Sheet,
   SheetContent,
@@ -21,6 +22,7 @@ import { StatusBadge, statusLabel } from "./StatusBadge";
 import { RichTextViewer } from "@/components/ui/rich-text-editor";
 import { AttachmentsManager } from "./AttachmentsPopover";
 import { EditableField, SalaryField } from "./EditableField";
+import { SOURCE_PLATFORM_DATALIST_ID } from "./source-platforms";
 import {
   updateMyApplicationStatus,
   updateJobApplicationFields,
@@ -68,6 +70,19 @@ export function ApplicationDetailSheet({
     });
   };
 
+  const handleMarkNotInterested = () => {
+    startTransition(async () => {
+      const result = await updateMyApplicationStatus(groupId, application.id, {
+        status: "NOT_INTERESTED",
+      });
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success("Marked as not interested");
+    });
+  };
+
   const handleAppliedAtChange = (value: string) => {
     startTransition(async () => {
       const result = await updateMyApplicationStatus(groupId, application.id, { appliedAt: value });
@@ -76,7 +91,7 @@ export function ApplicationDetailSheet({
   };
 
   const handleFieldSave = (
-    field: "company" | "position" | "location" | "jobUrl" | "salary",
+    field: "company" | "position" | "location" | "jobUrl" | "salary" | "sourcePlatform",
     value: string,
   ) => {
     startTransition(async () => {
@@ -91,6 +106,17 @@ export function ApplicationDetailSheet({
     <Sheet>
       <SheetTrigger asChild>{children}</SheetTrigger>
       <SheetContent className="w-full gap-0 data-[side=right]:sm:max-w-2xl">
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="absolute top-4 right-12 text-muted-foreground hover:text-destructive"
+          title="Not interested"
+          onClick={handleMarkNotInterested}
+          disabled={isPending || myStatus === "NOT_INTERESTED"}
+        >
+          <Ban />
+          <span className="sr-only">Mark as not interested</span>
+        </Button>
         <SheetHeader>
           <SheetTitle className="flex items-center gap-1.5">
             <EditableField
@@ -184,7 +210,18 @@ export function ApplicationDetailSheet({
             </div>
           </Field>
 
-          <Field label="Added by">{firstName(application.createdBy.name)}</Field>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Source">
+              <EditableField
+                value={application.sourcePlatform ?? ""}
+                onSave={(v) => handleFieldSave("sourcePlatform", v)}
+                placeholder="—"
+                variant="field"
+                list={SOURCE_PLATFORM_DATALIST_ID}
+              />
+            </Field>
+            <Field label="Added by">{firstName(application.createdBy.name)}</Field>
+          </div>
 
           <Separator />
 

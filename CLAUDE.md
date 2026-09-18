@@ -121,12 +121,27 @@ from the model.
 ### WhatsApp bot
 
 `whatsapp-bot/index.ts` is a standalone script (Baileys, not part of the Next.js app —
-run separately with `npm run bot:whatsapp`) that lets a group member add a loker from
-the group's WhatsApp chat by sending `/loker <free text>`. It reuses this same codebase's
+run separately with `npm run bot:whatsapp`). It reuses this same codebase's
 `AccountService`/`GroupService`/`JobApplicationService`/`lib/ai/parse-job-dump.ts` directly
 (imported via the `@/*` path alias, which `tsx` resolves from `tsconfig.json`) instead of
 going through the `app/action/*` server actions, since those call `next/cache` APIs that
 only work inside a Next.js request.
+
+Commands (sent in a linked WhatsApp group chat):
+- `/id` — replies with the group's JID, for pasting into Group settings. Works even if
+  the group isn't linked yet or the sender hasn't linked their number.
+- `/loker <free text>` — runs the free text through `parseJobDump` and creates a
+  `JobApplication` in the linked group's board (source `AI_DUMP`).
+- `/me` — the sender's own summary of the linked group's board:
+  `JobApplicationService.getMemberOverview` returns total applications, how many are
+  still WISHLIST (a member with no `ApplicationMemberStatus` row defaults to WISHLIST,
+  same convention as the web app), the most recently added application, and the nearest
+  upcoming interview. "Nearest wawancara" reuses `ApplicationMemberStatus.appliedAt` —
+  despite the name, the web UI (`ApplicationDetailSheet`) lets a member set that date for
+  *any* status, not just APPLIED, so setting it while status is INTERVIEW is how an
+  interview date gets recorded; there's no separate `interviewAt` field.
+- `/id`/`/me`/`/loker` all require the group to be linked; `/me` and `/loker` additionally
+  require the sender's number to be linked to an Account that's a member of that group.
 
 Matching a WA message to an app Account/Group is entirely phone-number/JID based, both
 opt-in and self-served — no new auth system:

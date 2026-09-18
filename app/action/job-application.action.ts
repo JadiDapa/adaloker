@@ -5,8 +5,10 @@ import { requireAccount } from "@/lib/clerk-session";
 import { GroupService } from "@/servers/services/group.service";
 import { JobApplicationService } from "@/servers/services/job-application.service";
 import { parseJobDump } from "@/lib/ai/parse-job-dump";
+import { fetchPageText } from "@/lib/fetch-page-text";
 import {
   AiDumpSchema,
+  UrlDumpSchema,
   JobApplicationFormSchema,
   UpdateMyApplicationStatusSchema,
   UpdateJobApplicationFieldsSchema,
@@ -55,6 +57,7 @@ export async function createJobApplication(
     location: parsed.data.location || null,
     jobUrl: parsed.data.jobUrl || null,
     salary: parsed.data.salary || null,
+    sourcePlatform: parsed.data.sourcePlatform || null,
     status: parsed.data.status,
     appliedAt: toDate(parsed.data.appliedAt),
     notes: parsed.data.notes || null,
@@ -90,6 +93,7 @@ export async function createJobApplicationFromDump(
   groupId: string,
   extracted: JobApplicationFormDTO,
   rawDumpText: string,
+  source: typeof ApplicationSource.AI_DUMP | typeof ApplicationSource.URL_DUMP = ApplicationSource.AI_DUMP,
 ): Promise<ActionResult> {
   const account = await requireMembership(groupId);
 
@@ -106,16 +110,60 @@ export async function createJobApplicationFromDump(
     location: parsed.data.location || null,
     jobUrl: parsed.data.jobUrl || null,
     salary: parsed.data.salary || null,
+    sourcePlatform: parsed.data.sourcePlatform || null,
     status: parsed.data.status,
     appliedAt: toDate(parsed.data.appliedAt),
     notes: parsed.data.notes || null,
-    source: ApplicationSource.AI_DUMP,
+    source,
     rawDumpText,
   });
 
   revalidatePath(`/groups/${groupId}`);
 
   return { ok: true, message: "Application added" };
+}
+
+/** Fetches a job posting URL and parses it into structured fields via AI — does not
+ * save anything yet. Best-effort: sites that block server-side fetches or require
+ * login (e.g. LinkedIn) may fail or return incomplete data. */
+export async function parseJobApplicationUrl(
+  groupId: string,
+  url: string,
+): Promise<ActionResult<ExtractedJobApplication>> {
+  await requireMembership(groupId);
+
+  const parsed = UrlDumpSchema.safeParse({ url });
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid URL" };
+  }
+
+  let pageText: string;
+  try {
+    pageText = await fetchPageText(parsed.data.url);
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Couldn't fetch that page.",
+    };
+  }
+
+  if (!pageText.trim()) {
+    return { ok: false, error: "That page had no readable text to extract from." };
+  }
+
+  try {
+    const extracted = await parseJobDump(pageText);
+    return {
+      ok: true,
+      message: "Parsed",
+      data: { ...extracted, jobUrl: extracted.jobUrl ?? parsed.data.url },
+    };
+  } catch {
+    return {
+      ok: false,
+      error: "Could not parse that page. Try pasting the details as text instead, or fill the form manually.",
+    };
+  }
 }
 
 /** Updates the current user's own status/applied-date for a job application. */
@@ -156,13 +204,14 @@ export async function updateJobApplicationFields(
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid data" };
   }
 
-  const { company, position, location, jobUrl, salary } = parsed.data;
+  const { company, position, location, jobUrl, salary, sourcePlatform } = parsed.data;
   await JobApplicationService.update(applicationId, {
     ...(company !== undefined ? { company } : {}),
     ...(position !== undefined ? { position } : {}),
     ...(location !== undefined ? { location: location || null } : {}),
     ...(jobUrl !== undefined ? { jobUrl: jobUrl || null } : {}),
     ...(salary !== undefined ? { salary: salary || null } : {}),
+    ...(sourcePlatform !== undefined ? { sourcePlatform: sourcePlatform || null } : {}),
   });
 
   revalidatePath(`/groups/${groupId}`);
