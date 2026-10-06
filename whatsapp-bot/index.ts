@@ -16,6 +16,7 @@ import { GroupService } from "@/servers/services/group.service";
 import { JobApplicationService } from "@/servers/services/job-application.service";
 import { parseJobDump } from "@/lib/ai/parse-job-dump";
 import { fetchPageText } from "@/lib/fetch-page-text";
+import { checkGemini } from "@/lib/ai/check-gemini";
 import { ApplicationSource, ApplicationStatus } from "@/generated/prisma";
 import { format } from "date-fns";
 
@@ -24,6 +25,8 @@ import { format } from "date-fns";
 const TRIGGER_PREFIX = "/loker";
 /** Sent by any member (even unlinked ones) to reveal a group chat's JID for setup. */
 const ID_COMMAND = "/id";
+/** Checks whether the shared Gemini key can still generate (quota/credit/key status). */
+const AI_COMMAND = "/ai";
 /** Lists every bot command — works anywhere, even before the group/number is linked. */
 const HELP_COMMAND = "/help";
 /** Replies with the sender's own job-tracking summary for this group's board. */
@@ -126,6 +129,18 @@ async function connect() {
         await handleMessage(sock, msg);
       } catch (error) {
         console.error("Failed to handle message", error);
+        // Tell the sender instead of going silent — almost always the DB being
+        // unreachable or a pending migration (see the console for the real error).
+        const remoteJid = msg.key.remoteJid;
+        if (remoteJid && isJidGroup(remoteJid)) {
+          await sock
+            .sendMessage(
+              remoteJid,
+              { text: "⚠️ Something went wrong on the bot's side (database/AI unreachable). Try again in a bit." },
+              { quoted: msg },
+            )
+            .catch(() => {});
+        }
       }
     }
   });
@@ -148,9 +163,11 @@ async function handleMessage(sock: ReturnType<typeof makeWASocket>, msg: WAMessa
         `${TRIGGER_PREFIX} <text> — add a loker from a job posting/notes`,
         `${TRIGGER_PREFIX} <link> — add a loker by scraping the job page`,
         `${LIST_COMMAND} — newest 10 loker (${LIST_COMMAND} 20, ${LIST_COMMAND} all for more)`,
+        `${LIST_COMMAND} <status> — filter by your status, e.g. ${LIST_COMMAND} wishlist, ${LIST_COMMAND} applied all`,
         `${SET_COMMAND} <#> <status> — change your status, e.g. ${SET_COMMAND} 12 lamar`,
         "   statuses: wishlist, applied/lamar, oa, interview/wawancara, offer, rejected/ditolak, ghosted, withdrawn, notinterested",
         `${ME_COMMAND} — your summary on this board`,
+        `${AI_COMMAND} — check if the Gemini AI key still works / has quota`,
         `${ID_COMMAND} — this group's JID (for linking in Group settings)`,
         `${HELP_COMMAND} — this list`,
       ].join("\n"),
@@ -163,11 +180,12 @@ async function handleMessage(sock: ReturnType<typeof makeWASocket>, msg: WAMessa
     return;
   }
 
+  const isAiCommand = lowerText === AI_COMMAND;
   const isMeCommand = lowerText === ME_COMMAND;
   const isListCommand = lowerText === LIST_COMMAND || lowerText.startsWith(`${LIST_COMMAND} `);
   const isSetCommand = lowerText === SET_COMMAND || lowerText.startsWith(`${SET_COMMAND} `);
   const isLokerCommand = lowerText.startsWith(TRIGGER_PREFIX);
-  if (!isMeCommand && !isListCommand && !isSetCommand && !isLokerCommand) return;
+  if (!isAiCommand && !isMeCommand && !isListCommand && !isSetCommand && !isLokerCommand) return;
 
   const group = await GroupService.findByWhatsappJid(remoteJid);
   if (!group) {
@@ -197,6 +215,18 @@ async function handleMessage(sock: ReturnType<typeof makeWASocket>, msg: WAMessa
     return;
   }
 
+  // Members only (checked above) — each check spends a few tokens on the shared key.
+  if (isAiCommand) {
+    const health = await checkGemini();
+    await reply(
+      [
+        `${health.ok ? "✅" : "❌"} Gemini: ${health.message}`,
+        "Google doesn't expose a remaining-credit number via the API — see usage/spend at https://aistudio.google.com/usage",
+      ].join("\n"),
+    );
+    return;
+  }
+
   if (isMeCommand) {
     const overview = await JobApplicationService.getMemberOverview(group.id, account.id);
 
@@ -218,23 +248,41 @@ async function handleMessage(sock: ReturnType<typeof makeWASocket>, msg: WAMessa
   }
 
   if (isListCommand) {
-    const arg = lowerText.slice(LIST_COMMAND.length).trim();
+    // Args in any order: a count ("20"), "all", and/or a status filter using the same
+    // words as /set ("applied", "--wawancara", "not interested").
     let take: number | undefined = LIST_DEFAULT_COUNT;
-    if (arg === "all") {
-      take = undefined;
-    } else if (arg) {
-      take = Number(arg);
-      if (!Number.isInteger(take) || take < 1) {
-        await reply(`Send "${LIST_COMMAND}", "${LIST_COMMAND} 20" or "${LIST_COMMAND} all".`);
-        return;
-      }
+    const statusWords: string[] = [];
+    for (const rawArg of lowerText.slice(LIST_COMMAND.length).trim().split(/\s+/).filter(Boolean)) {
+      const arg = rawArg.replace(/^-+/, "");
+      if (arg === "all") take = undefined;
+      else if (/^\d+$/.test(arg)) take = Number(arg);
+      else statusWords.push(arg);
     }
-
-    const { total, applications } = await JobApplicationService.listForMember(group.id, account.id, take);
-    if (total === 0) {
-      await reply(`No loker on "${group.name}" yet — add one with "${TRIGGER_PREFIX}".`);
+    const statusFilter = statusWords.length
+      ? STATUS_ALIASES[statusWords.join("").replace(/[-_]/g, "")]
+      : undefined;
+    if ((take !== undefined && take < 1) || (statusWords.length && !statusFilter)) {
+      await reply(
+        `Send "${LIST_COMMAND}", "${LIST_COMMAND} 20", "${LIST_COMMAND} all", or add a status to filter, e.g. "${LIST_COMMAND} applied" / "${LIST_COMMAND} wishlist 20".\nStatuses: wishlist, applied/lamar, oa, interview/wawancara, offer, rejected/ditolak, ghosted, withdrawn, notinterested`,
+      );
       return;
     }
+
+    const { total, applications } = await JobApplicationService.listForMember(
+      group.id,
+      account.id,
+      take,
+      statusFilter,
+    );
+    if (total === 0) {
+      await reply(
+        statusFilter
+          ? `You have no loker with status ${statusFilter} on "${group.name}".`
+          : `No loker on "${group.name}" yet — add one with "${TRIGGER_PREFIX}".`,
+      );
+      return;
+    }
+    const filterSuffix = statusFilter ? ` ${statusFilter.toLowerCase()}` : "";
 
     // Same "applied" convention as /me and the web app — any status other than WISHLIST.
     const lines = applications.flatMap((app) => {
@@ -244,11 +292,11 @@ async function handleMessage(sock: ReturnType<typeof makeWASocket>, msg: WAMessa
       return [title, `   ${app.jobUrl ?? "(no link)"}`];
     });
 
-    const header = `📋 Loker in "${group.name}" (${applications.length} of ${total}, ✅ = applied)
+    const header = `📋 Loker in "${group.name}"${statusFilter ? ` — ${statusFilter}` : ""} (${applications.length} of ${total}, ✅ = applied)
 Change status: "${SET_COMMAND} <#> applied"`;
     const footer =
       applications.length < total
-        ? `\nSend "${LIST_COMMAND} ${Math.min(total, applications.length + LIST_DEFAULT_COUNT)}" or "${LIST_COMMAND} all" for more.`
+        ? `\nSend "${LIST_COMMAND} ${Math.min(total, applications.length + LIST_DEFAULT_COUNT)}${filterSuffix}" or "${LIST_COMMAND} all${filterSuffix}" for more.`
         : undefined;
 
     await reply([header, ...lines, footer].filter(Boolean).join("\n"));

@@ -161,11 +161,26 @@ export const JobApplicationService = {
   /** Newest-first board entries for the WhatsApp bot's "/list" command, with only the
    * given member's own status row attached (no row = WISHLIST by convention). Omit
    * `take` to list the whole board. */
-  async listForMember(groupId: string, accountId: string, take?: number) {
+  async listForMember(
+    groupId: string,
+    accountId: string,
+    take?: number,
+    status?: ApplicationStatus,
+  ) {
+    const where: Prisma.JobApplicationWhereInput = { groupId };
+    if (status === ApplicationStatus.WISHLIST) {
+      // No row for this member counts as WISHLIST too.
+      where.memberStatuses = {
+        none: { accountId, status: { not: ApplicationStatus.WISHLIST } },
+      };
+    } else if (status) {
+      where.memberStatuses = { some: { accountId, status } };
+    }
+
     const [total, applications] = await Promise.all([
-      prisma.jobApplication.count({ where: { groupId } }),
+      prisma.jobApplication.count({ where }),
       prisma.jobApplication.findMany({
-        where: { groupId },
+        where,
         orderBy: { createdAt: "desc" },
         take,
         select: {

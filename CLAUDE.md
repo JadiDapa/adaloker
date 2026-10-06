@@ -147,14 +147,18 @@ Commands (sent in a linked WhatsApp group chat):
   despite the name, the web UI (`ApplicationDetailSheet`) lets a member set that date for
   *any* status, not just APPLIED, so setting it while status is INTERVIEW is how an
   interview date gets recorded; there's no separate `interviewAt` field.
-- `/list [n|all]` — the linked group's board newest first as "#number Company - Position"
+- `/list [n|all] [status]` — the linked group's board newest first as "#number Company - Position"
   lines (default 10, `JobApplicationService.listForMember`). Ones the sender has applied
   to (non-WISHLIST, same convention as `/me`) get a ✅ and their status; the rest show
-  their `jobUrl`.
+  their `jobUrl`. An optional status (same words as `/set`, any order with the count)
+  filters by the sender's own status; `wishlist` includes loker with no status row.
 - `/set <#> <status>` — changes the sender's own `ApplicationMemberStatus` on loker `#`
   (see `STATUS_ALIASES` for accepted words, e.g. apply/applied/lamar → APPLIED). Moving
   off WISHLIST stamps today as `appliedAt` if unset, same as the web status dropdown.
-- `/id`/`/me`/`/list`/`/set`/`/loker` all require the group to be linked; `/me`, `/list`, `/set` and `/loker` additionally
+- `/ai` — `lib/ai/check-gemini.ts` sends a 1-token generate to `AI_DUMP_MODEL` and reports
+  working / out of quota (429) / key rejected. Gemini has no remaining-credit API, so a
+  real call is the only signal; the reply links AI Studio's usage page for actual spend.
+- `/id`/`/me`/`/list`/`/set`/`/loker`/`/ai` all require the group to be linked; `/me`, `/list`, `/set`, `/loker` and `/ai` additionally
   require the sender's number to be linked to an Account that's a member of that group.
 
 Matching a WA message to an app Account/Group is entirely phone-number/JID based, both
