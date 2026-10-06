@@ -87,6 +87,9 @@ together.
   added it (`createdBy` is attribution, not an access filter). `source` +`rawDumpText`
   record whether/what was pasted for the AI dump feature. `notes` is HTML from the
   Tiptap rich text editor.
+  `number` is a permanent per-group sequence (`@@unique([groupId, number])`, assigned
+  max+1 in `JobApplicationService.create`) — the short "#12" the WhatsApp bot uses
+  instead of the cuid `id`.
 - **ApplicationMemberStatus** — one member's own status + applied date for a
   `JobApplication` (`@@unique([applicationId, accountId])`). Status/applied date are
   **per member**, not shared on the posting — everyone in the group tracks their own
@@ -143,7 +146,14 @@ Commands (sent in a linked WhatsApp group chat):
   despite the name, the web UI (`ApplicationDetailSheet`) lets a member set that date for
   *any* status, not just APPLIED, so setting it while status is INTERVIEW is how an
   interview date gets recorded; there's no separate `interviewAt` field.
-- `/id`/`/me`/`/loker` all require the group to be linked; `/me` and `/loker` additionally
+- `/list [n|all]` — the linked group's board newest first as "#number Company - Position"
+  lines (default 10, `JobApplicationService.listForMember`). Ones the sender has applied
+  to (non-WISHLIST, same convention as `/me`) get a ✅ and their status; the rest show
+  their `jobUrl`.
+- `/set <#> <status>` — changes the sender's own `ApplicationMemberStatus` on loker `#`
+  (see `STATUS_ALIASES` for accepted words, e.g. apply/applied/lamar → APPLIED). Moving
+  off WISHLIST stamps today as `appliedAt` if unset, same as the web status dropdown.
+- `/id`/`/me`/`/list`/`/set`/`/loker` all require the group to be linked; `/me`, `/list`, `/set` and `/loker` additionally
   require the sender's number to be linked to an Account that's a member of that group.
 
 Matching a WA message to an app Account/Group is entirely phone-number/JID based, both

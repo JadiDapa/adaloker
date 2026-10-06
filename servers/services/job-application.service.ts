@@ -41,16 +41,47 @@ export const JobApplicationService = {
     });
   },
 
+  /** Assigns the next per-group `number` (max + 1). Two members adding at the same
+   * moment can race to the same number — the `@@unique([groupId, number])` constraint
+   * rejects the loser, which just retries with a fresh max. */
   async create(data: JobApplicationCreateData) {
     const { status, appliedAt, createdById, ...rest } = data;
 
-    return prisma.jobApplication.create({
-      data: {
-        ...rest,
-        createdById,
-        memberStatuses: {
-          create: { accountId: createdById, status, appliedAt: appliedAt ?? null },
-        },
+    for (let attempt = 1; ; attempt++) {
+      const { _max } = await prisma.jobApplication.aggregate({
+        where: { groupId: data.groupId },
+        _max: { number: true },
+      });
+
+      try {
+        return await prisma.jobApplication.create({
+          data: {
+            ...rest,
+            number: (_max.number ?? 0) + 1,
+            createdById,
+            memberStatuses: {
+              create: { accountId: createdById, status, appliedAt: appliedAt ?? null },
+            },
+          },
+        });
+      } catch (error) {
+        const isNumberClash =
+          error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
+        if (!isNumberClash || attempt >= 5) throw error;
+      }
+    }
+  },
+
+  /** Looks up an application by its per-group `number` (as shown by the bot's "/list"),
+   * with only the given member's own status row attached. */
+  async getByNumberForMember(groupId: string, number: number, accountId: string) {
+    return prisma.jobApplication.findUnique({
+      where: { groupId_number: { groupId, number } },
+      select: {
+        id: true,
+        company: true,
+        position: true,
+        memberStatuses: { where: { accountId }, select: { status: true, appliedAt: true } },
       },
     });
   },
@@ -125,6 +156,29 @@ export const JobApplicationService = {
       latest,
       nearestInterview,
     };
+  },
+
+  /** Newest-first board entries for the WhatsApp bot's "/list" command, with only the
+   * given member's own status row attached (no row = WISHLIST by convention). Omit
+   * `take` to list the whole board. */
+  async listForMember(groupId: string, accountId: string, take?: number) {
+    const [total, applications] = await Promise.all([
+      prisma.jobApplication.count({ where: { groupId } }),
+      prisma.jobApplication.findMany({
+        where: { groupId },
+        orderBy: { createdAt: "desc" },
+        take,
+        select: {
+          number: true,
+          company: true,
+          position: true,
+          jobUrl: true,
+          memberStatuses: { where: { accountId }, select: { status: true } },
+        },
+      }),
+    ]);
+
+    return { total, applications };
   },
 
   async addAttachment(

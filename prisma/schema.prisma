@@ -107,6 +107,10 @@ model JobApplication {
   id      String @id @default(cuid())
   group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
   groupId String
+  /// Nomor urut permanen per grup (#1, #2, ...) -- dipakai bot WhatsApp ("/list",
+  /// "/set <nomor> <status>") karena `id` (cuid) terlalu panjang untuk diketik.
+  /// Diisi max+1 oleh JobApplicationService.create, tidak pernah berubah/dipakai ulang.
+  number  Int
 
   /// Siapa yang menambahkan entri ini -- dipakai atribusi di shared board,
   /// bukan untuk membatasi visibility (semua anggota grup bisa lihat/edit).
@@ -139,6 +143,7 @@ model JobApplication {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([groupId, number])
   @@index([groupId, createdAt])
   @@index([createdById])
 }

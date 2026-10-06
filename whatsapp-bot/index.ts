@@ -16,7 +16,7 @@ import { GroupService } from "@/servers/services/group.service";
 import { JobApplicationService } from "@/servers/services/job-application.service";
 import { parseJobDump } from "@/lib/ai/parse-job-dump";
 import { fetchPageText } from "@/lib/fetch-page-text";
-import { ApplicationSource } from "@/generated/prisma";
+import { ApplicationSource, ApplicationStatus } from "@/generated/prisma";
 import { format } from "date-fns";
 
 /** Prefix that triggers an AI-dump add — e.g. "/loker Backend Engineer @ Acme, remote, ...",
@@ -26,6 +26,34 @@ const TRIGGER_PREFIX = "/loker";
 const ID_COMMAND = "/id";
 /** Replies with the sender's own job-tracking summary for this group's board. */
 const ME_COMMAND = "/me";
+/** Lists the group's board newest first — "/list" (default count), "/list 20", "/list all". */
+const LIST_COMMAND = "/list";
+const LIST_DEFAULT_COUNT = 10;
+/** Changes the sender's own status on one loker by its "/list" number — "/set 12 applied". */
+const SET_COMMAND = "/set";
+
+/** Words accepted by "/set" (lowercased, spaces/dashes/underscores stripped), including
+ * the Indonesian ones the group actually types. */
+const STATUS_ALIASES: Record<string, ApplicationStatus> = {
+  wishlist: ApplicationStatus.WISHLIST,
+  apply: ApplicationStatus.APPLIED,
+  applied: ApplicationStatus.APPLIED,
+  lamar: ApplicationStatus.APPLIED,
+  oa: ApplicationStatus.OA,
+  interview: ApplicationStatus.INTERVIEW,
+  wawancara: ApplicationStatus.INTERVIEW,
+  offer: ApplicationStatus.OFFER,
+  rejected: ApplicationStatus.REJECTED,
+  reject: ApplicationStatus.REJECTED,
+  ditolak: ApplicationStatus.REJECTED,
+  tolak: ApplicationStatus.REJECTED,
+  ghosted: ApplicationStatus.GHOSTED,
+  ghost: ApplicationStatus.GHOSTED,
+  withdrawn: ApplicationStatus.WITHDRAWN,
+  withdraw: ApplicationStatus.WITHDRAWN,
+  notinterested: ApplicationStatus.NOT_INTERESTED,
+  skip: ApplicationStatus.NOT_INTERESTED,
+};
 /** A dump that's nothing but a single http(s) link is scraped instead of parsed as-is. */
 const LONE_URL_PATTERN = /^https?:\/\/\S+$/i;
 
@@ -117,8 +145,10 @@ async function handleMessage(sock: ReturnType<typeof makeWASocket>, msg: WAMessa
   }
 
   const isMeCommand = lowerText === ME_COMMAND;
+  const isListCommand = lowerText === LIST_COMMAND || lowerText.startsWith(`${LIST_COMMAND} `);
+  const isSetCommand = lowerText === SET_COMMAND || lowerText.startsWith(`${SET_COMMAND} `);
   const isLokerCommand = lowerText.startsWith(TRIGGER_PREFIX);
-  if (!isMeCommand && !isLokerCommand) return;
+  if (!isMeCommand && !isListCommand && !isSetCommand && !isLokerCommand) return;
 
   const group = await GroupService.findByWhatsappJid(remoteJid);
   if (!group) {
@@ -168,6 +198,73 @@ async function handleMessage(sock: ReturnType<typeof makeWASocket>, msg: WAMessa
     return;
   }
 
+  if (isListCommand) {
+    const arg = lowerText.slice(LIST_COMMAND.length).trim();
+    let take: number | undefined = LIST_DEFAULT_COUNT;
+    if (arg === "all") {
+      take = undefined;
+    } else if (arg) {
+      take = Number(arg);
+      if (!Number.isInteger(take) || take < 1) {
+        await reply(`Send "${LIST_COMMAND}", "${LIST_COMMAND} 20" or "${LIST_COMMAND} all".`);
+        return;
+      }
+    }
+
+    const { total, applications } = await JobApplicationService.listForMember(group.id, account.id, take);
+    if (total === 0) {
+      await reply(`No loker on "${group.name}" yet — add one with "${TRIGGER_PREFIX}".`);
+      return;
+    }
+
+    // Same "applied" convention as /me and the web app — any status other than WISHLIST.
+    const lines = applications.flatMap((app) => {
+      const myStatus = app.memberStatuses[0]?.status ?? ApplicationStatus.WISHLIST;
+      const title = `#${app.number} ${app.company} - ${app.position}`;
+      if (myStatus !== ApplicationStatus.WISHLIST) return [`${title} ✅ ${myStatus}`];
+      return [title, `   ${app.jobUrl ?? "(no link)"}`];
+    });
+
+    const header = `📋 Loker in "${group.name}" (${applications.length} of ${total}, ✅ = applied)
+Change status: "${SET_COMMAND} <#> applied"`;
+    const footer =
+      applications.length < total
+        ? `\nSend "${LIST_COMMAND} ${Math.min(total, applications.length + LIST_DEFAULT_COUNT)}" or "${LIST_COMMAND} all" for more.`
+        : undefined;
+
+    await reply([header, ...lines, footer].filter(Boolean).join("\n"));
+    return;
+  }
+
+  if (isSetCommand) {
+    const usage = `Send "${SET_COMMAND} <#> <status>", e.g. "${SET_COMMAND} 12 applied" (# from "${LIST_COMMAND}").
+Statuses: wishlist, applied/lamar, oa, interview/wawancara, offer, rejected/ditolak, ghosted, withdrawn, notinterested`;
+    const [numberArg, ...statusWords] = lowerText.slice(SET_COMMAND.length).trim().split(/\s+/);
+    const number = Number(numberArg?.replace(/^#/, ""));
+    const status = STATUS_ALIASES[statusWords.join("").replace(/[-_]/g, "")];
+    if (!Number.isInteger(number) || number < 1 || !status) {
+      await reply(usage);
+      return;
+    }
+
+    const application = await JobApplicationService.getByNumberForMember(group.id, number, account.id);
+    if (!application) {
+      await reply(`There's no loker #${number} on "${group.name}" — check "${LIST_COMMAND}".`);
+      return;
+    }
+
+    // Same as the web app's status dropdown (ApplicationDetailSheet): moving off
+    // WISHLIST stamps today as the applied date, unless the member already has one.
+    const hasAppliedAt = Boolean(application.memberStatuses[0]?.appliedAt);
+    await JobApplicationService.upsertMemberStatus(application.id, account.id, {
+      status,
+      ...(status !== ApplicationStatus.WISHLIST && !hasAppliedAt ? { appliedAt: new Date() } : {}),
+    });
+
+    await reply(`#${number} ${application.company} - ${application.position} → ${status} ✅`);
+    return;
+  }
+
   const dumpText = text.slice(TRIGGER_PREFIX.length).trim();
   if (!dumpText) {
     await reply(`Send "${TRIGGER_PREFIX}" followed by the job posting/email/notes to add it.`);
@@ -202,7 +299,7 @@ async function handleMessage(sock: ReturnType<typeof makeWASocket>, msg: WAMessa
     return;
   }
 
-  await JobApplicationService.create({
+  const created = await JobApplicationService.create({
     groupId: group.id,
     createdById: account.id,
     company: extracted.company,
@@ -219,7 +316,7 @@ async function handleMessage(sock: ReturnType<typeof makeWASocket>, msg: WAMessa
   });
 
   const lines = [
-    `Added to "${group.name}" ✅`,
+    `Added to "${group.name}" as #${created.number} ✅`,
     `${extracted.position} @ ${extracted.company}`,
     extracted.location ? `Location: ${extracted.location}` : undefined,
     extracted.salary ? `Salary: ${extracted.salary}` : undefined,
