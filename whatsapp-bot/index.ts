@@ -15,15 +15,19 @@ import { AccountService } from "@/servers/services/account.service";
 import { GroupService } from "@/servers/services/group.service";
 import { JobApplicationService } from "@/servers/services/job-application.service";
 import { parseJobDump } from "@/lib/ai/parse-job-dump";
+import { fetchPageText } from "@/lib/fetch-page-text";
 import { ApplicationSource } from "@/generated/prisma";
 import { format } from "date-fns";
 
-/** Prefix that triggers an AI-dump add — e.g. "/loker Backend Engineer @ Acme, remote, ...". */
+/** Prefix that triggers an AI-dump add — e.g. "/loker Backend Engineer @ Acme, remote, ...",
+ * or "/loker https://..." to scrape a job posting URL (same as the web app's URL tab). */
 const TRIGGER_PREFIX = "/loker";
 /** Sent by any member (even unlinked ones) to reveal a group chat's JID for setup. */
 const ID_COMMAND = "/id";
 /** Replies with the sender's own job-tracking summary for this group's board. */
 const ME_COMMAND = "/me";
+/** A dump that's nothing but a single http(s) link is scraped instead of parsed as-is. */
+const LONE_URL_PATTERN = /^https?:\/\/\S+$/i;
 
 const AUTH_DIR = path.join(__dirname, "auth");
 const logger = pino({ level: process.env.WHATSAPP_LOG_LEVEL || "warn" });
@@ -150,6 +154,7 @@ async function handleMessage(sock: ReturnType<typeof makeWASocket>, msg: WAMessa
     const lines = [
       `📊 Your job tracking in "${group.name}"`,
       `Total loker: ${overview.total}`,
+      `Applied: ${overview.applied}`,
       `Wishlisted: ${overview.wishlisted}`,
       overview.latest
         ? `Latest loker: ${overview.latest.position} @ ${overview.latest.company} (${format(overview.latest.createdAt, "MMM d, yyyy")})`
@@ -169,11 +174,31 @@ async function handleMessage(sock: ReturnType<typeof makeWASocket>, msg: WAMessa
     return;
   }
 
+  const isUrlDump = LONE_URL_PATTERN.test(dumpText);
+
+  let textToParse = dumpText;
+  if (isUrlDump) {
+    try {
+      textToParse = await fetchPageText(dumpText);
+    } catch (err) {
+      await reply(err instanceof Error ? err.message : "Couldn't fetch that page.");
+      return;
+    }
+    if (!textToParse.trim()) {
+      await reply("That page had no readable text to extract from — try pasting the details as text instead.");
+      return;
+    }
+  }
+
   let extracted;
   try {
-    extracted = await parseJobDump(dumpText);
+    extracted = await parseJobDump(textToParse);
   } catch {
-    await reply("Couldn't parse that into a job application — try including more details (company, role, etc).");
+    await reply(
+      isUrlDump
+        ? "Couldn't parse that page — some sites (e.g. LinkedIn) block scraping. Try pasting the details as text instead."
+        : "Couldn't parse that into a job application — try including more details (company, role, etc).",
+    );
     return;
   }
 
@@ -183,13 +208,13 @@ async function handleMessage(sock: ReturnType<typeof makeWASocket>, msg: WAMessa
     company: extracted.company,
     position: extracted.position,
     location: extracted.location,
-    jobUrl: extracted.jobUrl,
+    jobUrl: extracted.jobUrl ?? (isUrlDump ? dumpText : null),
     salary: extracted.salary,
     sourcePlatform: extracted.sourcePlatform,
     status: extracted.status,
     appliedAt: extracted.appliedAt ? new Date(extracted.appliedAt) : null,
     notes: extracted.notes,
-    source: ApplicationSource.AI_DUMP,
+    source: isUrlDump ? ApplicationSource.URL_DUMP : ApplicationSource.AI_DUMP,
     rawDumpText: dumpText,
   });
 

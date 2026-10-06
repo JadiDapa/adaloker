@@ -119,6 +119,8 @@ export const JobApplicationService = {
 
     return {
       total,
+      /** Same convention as the web app's "Applied" filter — any status other than WISHLIST. */
+      applied: nonWishlistCount,
       wishlisted: total - nonWishlistCount,
       latest,
       nearestInterview,

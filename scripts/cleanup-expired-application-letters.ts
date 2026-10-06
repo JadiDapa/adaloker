@@ -9,6 +9,7 @@
  *
  *   npm run cleanup:letters
  */
+import "dotenv/config";
 import { ApplicationLetterService } from "@/servers/services/application-letter.service";
 import { utapi } from "@/lib/uploadthing";
 
@@ -21,7 +22,9 @@ async function main() {
 
   console.log(`Cleaning up ${expired.length} expired application letter(s)...`);
 
-  await Promise.all(expired.map((letter) => utapi.deleteFiles(letter.pdfKey).catch(() => {})));
+  await Promise.all(
+    expired.map((letter) => utapi.deleteFiles(letter.pdfKey).catch(() => {})),
+  );
   await ApplicationLetterService.deleteMany(expired.map((letter) => letter.id));
 
   console.log("Done.");

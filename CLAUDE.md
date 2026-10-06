@@ -131,9 +131,12 @@ Commands (sent in a linked WhatsApp group chat):
 - `/id` — replies with the group's JID, for pasting into Group settings. Works even if
   the group isn't linked yet or the sender hasn't linked their number.
 - `/loker <free text>` — runs the free text through `parseJobDump` and creates a
-  `JobApplication` in the linked group's board (source `AI_DUMP`).
+  `JobApplication` in the linked group's board (source `AI_DUMP`). If the text is just a
+  single http(s) link, it's scraped first with `lib/fetch-page-text.ts` (same as the web
+  app's URL tab) and saved with source `URL_DUMP`, falling back to the link as `jobUrl`.
 - `/me` — the sender's own summary of the linked group's board:
-  `JobApplicationService.getMemberOverview` returns total applications, how many are
+  `JobApplicationService.getMemberOverview` returns total applications, how many the
+  sender has applied to (any non-WISHLIST status, same as the web "Applied" filter), how many are
   still WISHLIST (a member with no `ApplicationMemberStatus` row defaults to WISHLIST,
   same convention as the web app), the most recently added application, and the nearest
   upcoming interview. "Nearest wawancara" reuses `ApplicationMemberStatus.appliedAt` —
