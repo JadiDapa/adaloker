@@ -131,6 +131,7 @@ going through the `app/action/*` server actions, since those call `next/cache` A
 only work inside a Next.js request.
 
 Commands (sent in a linked WhatsApp group chat):
+- `/help` — lists every command. Like `/id`, works even before anything is linked.
 - `/id` — replies with the group's JID, for pasting into Group settings. Works even if
   the group isn't linked yet or the sender hasn't linked their number.
 - `/loker <free text>` — runs the free text through `parseJobDump` and creates a

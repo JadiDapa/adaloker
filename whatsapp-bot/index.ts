@@ -24,6 +24,8 @@ import { format } from "date-fns";
 const TRIGGER_PREFIX = "/loker";
 /** Sent by any member (even unlinked ones) to reveal a group chat's JID for setup. */
 const ID_COMMAND = "/id";
+/** Lists every bot command — works anywhere, even before the group/number is linked. */
+const HELP_COMMAND = "/help";
 /** Replies with the sender's own job-tracking summary for this group's board. */
 const ME_COMMAND = "/me";
 /** Lists the group's board newest first — "/list" (default count), "/list 20", "/list all". */
@@ -138,6 +140,23 @@ async function handleMessage(sock: ReturnType<typeof makeWASocket>, msg: WAMessa
 
   const reply = (t: string) => sock.sendMessage(remoteJid, { text: t }, { quoted: msg });
   const lowerText = text.toLowerCase();
+
+  if (lowerText === HELP_COMMAND) {
+    await reply(
+      [
+        "🤖 Adaloker bot commands",
+        `${TRIGGER_PREFIX} <text> — add a loker from a job posting/notes`,
+        `${TRIGGER_PREFIX} <link> — add a loker by scraping the job page`,
+        `${LIST_COMMAND} — newest 10 loker (${LIST_COMMAND} 20, ${LIST_COMMAND} all for more)`,
+        `${SET_COMMAND} <#> <status> — change your status, e.g. ${SET_COMMAND} 12 lamar`,
+        "   statuses: wishlist, applied/lamar, oa, interview/wawancara, offer, rejected/ditolak, ghosted, withdrawn, notinterested",
+        `${ME_COMMAND} — your summary on this board`,
+        `${ID_COMMAND} — this group's JID (for linking in Group settings)`,
+        `${HELP_COMMAND} — this list`,
+      ].join("\n"),
+    );
+    return;
+  }
 
   if (lowerText === ID_COMMAND) {
     await reply(`Group JID: ${remoteJid}`);
